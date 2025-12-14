@@ -20,11 +20,11 @@ def inicializar_datos():
     
     # 5 Taxis: ID, Marca, Placa, Ubicación Inicial (x, y)
     datos_taxis = [
-        ("T-A", "Toyota", "ABC123", (5, 5)),
-        ("T-B", "Nissan", "DEF456", (1, 9)),
-        ("T-C", "Ford", "GHI789", (10, 1)),
-        ("T-D", "BMW", "JKL012", (15, 15)),
-        ("T-E", "Audi", "MNO345", (7, 12)),
+        ("TAXI 1", "Toyota", "ABC123", (5, 5)),
+        ("TAXI 2", "Nissan", "DEF456", (1, 9)),
+        ("TAXI 3", "Ford", "GHI789", (10, 1)),
+        ("TAXI 4", "BMW", "JKL012", (15, 15)),
+        ("TAXI 5", "Audi", "MNO345", (7, 12)),
     ]
 
     # 9 Clientes: Nombre, Origen (x, y), Destino (x, y)
