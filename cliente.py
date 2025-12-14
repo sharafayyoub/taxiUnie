@@ -10,19 +10,17 @@ class Cliente(threading.Thread):
         self.coordenadas_origen = coordenadas_origen
         self.coordenadas_destino = coordenadas_destino
         self.sistema_atencion = sistema_atencion
-        self.esta_en_taxi = threading.Event() # Evento para esperar a ser recogido
+        self.esta_en_taxi = threading.Event() 
         self.fue_atendido = False
+        self.hora_recogida_simulada = None # Se llena cuando el sistema lo asigna
 
     def run(self):
         """Simula el ciclo de vida del cliente: solicita y espera."""
-        # El cliente solicita el servicio.
         self.sistema_atencion.registrar_cliente(self)
-        
-        # El cliente espera a ser atendido por un taxi (simulamos la espera)
-        self.esta_en_taxi.wait() # Bloquea hasta que un taxi lo recoge y establece este evento
+        self.esta_en_taxi.wait() 
         
         if self.fue_atendido:
-            logging.info(f"Cliente {self.nombre} ha finalizado su viaje y califica el servicio.")
+            pass # El logging de la llegada se hace desde el Taxi para incluir la hora.
 
     def marcar_como_atendido(self):
         """Método llamado por el taxi para indicar que el cliente ha sido atendido."""

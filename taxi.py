@@ -2,10 +2,11 @@
 import threading
 import time
 import logging
+import random
 
 class Taxi(threading.Thread):
     """Representa un taxi en el sistema UNIETAXI."""
-    def __init__(self, id_vehiculo, marca, placa, ubicacion_inicial, sistema_atencion, duracion_simulacion):
+    def __init__(self, id_vehiculo, marca, placa, ubicacion_inicial, sistema_atencion, reloj_running):
         super().__init__(name=f"Taxi-{id_vehiculo}")
         self.id_vehiculo = id_vehiculo
         self.marca = marca
@@ -14,17 +15,14 @@ class Taxi(threading.Thread):
         self.sistema_atencion = sistema_atencion
         self.ganancia_total = 0
         self.cliente_actual = None
-        self.ejecutando = threading.Event()
-        self.ejecutando.set()
-        self.duracion_simulacion = duracion_simulacion
+        self.reloj_running = reloj_running # Referencia al evento del main para saber si el tiempo corre
+        self.num_viajes = 0
+        self.calificacion_media = 0.0 # Calificación del día
 
     def run(self):
-        """Simula el ciclo de vida del taxi: busca clientes, viaja, repite."""
+        """Ciclo de vida del taxi: busca, viaja, repite, hasta medianoche."""
         
-        tiempo_inicio = time.time()
-        
-        # Bucle de trabajo continuo
-        while self.ejecutando.is_set() and (time.time() - tiempo_inicio < self.duracion_simulacion):
+        while self.reloj_running.is_set(): # Corre mientras el reloj del sistema esté activo
             
             # 1. Buscar Cliente
             self.cliente_actual = self.sistema_atencion.buscar_y_asignar_cliente(self)
@@ -32,41 +30,49 @@ class Taxi(threading.Thread):
             if self.cliente_actual:
                 cliente = self.cliente_actual
                 
-                # 2. Recoger al Cliente
-                logging.info(f"Taxi {self.id_vehiculo}: Se dirige a recoger al cliente {cliente.nombre} en {cliente.coordenadas_origen}.")
+                # --- A. Viaje vacío (Recogida) ---
+                _, _, tiempo_vacio_simulado = self.sistema_atencion.calcular_costo_y_tiempo(self.ubicacion_actual, cliente.coordenadas_origen)
                 
-                # Simular el viaje vacío (distancia de taxi a cliente)
-                distancia_vacio, _ = self.sistema_atencion.calcular_tarifa_y_movimiento(self.ubicacion_actual, cliente.coordenadas_origen)
-                self._simular_movimiento(distancia_vacio)
+                logging.info(f"[ {self.sistema_atencion.get_tiempo_simulado().strftime('%H:%M:%S')} ] 🚗 {self.id_vehiculo} -> Recogida de {cliente.nombre}. Tiempo sim: {int(tiempo_vacio_simulado)}s.")
+                
+                # Simular tiempo real basado en el tiempo simulado del viaje
+                tiempo_real_viaje = tiempo_vacio_simulado / self.sistema_atencion.factor_aceleracion
+                self.sistema_atencion.avanzar_tiempo(tiempo_real_viaje)
+                time.sleep(tiempo_real_viaje) 
+                
                 self.ubicacion_actual = cliente.coordenadas_origen
+                logging.info(f"[ {self.sistema_atencion.get_tiempo_simulado().strftime('%H:%M:%S')} ] ✅ {self.id_vehiculo} recoge a {cliente.nombre}. Inicia viaje a {cliente.coordenadas_destino}.")
+                cliente.esta_en_taxi.set() 
+
+                # --- B. Viaje con Cliente (Entrega) ---
+                distancia_viaje, costo_viaje, tiempo_viaje_simulado = self.sistema_atencion.calcular_costo_y_tiempo(self.ubicacion_actual, cliente.coordenadas_destino)
                 
-                logging.info(f"Taxi {self.id_vehiculo}: ha recogido al cliente {cliente.nombre}. Inicia viaje a {cliente.coordenadas_destino}.")
-                cliente.esta_en_taxi.set() # Notifica al cliente que ha sido recogido
+                # Simular tiempo real
+                tiempo_real_viaje = tiempo_viaje_simulado / self.sistema_atencion.factor_aceleracion
+                hora_inicio_viaje = self.sistema_atencion.get_tiempo_simulado()
+                self.sistema_atencion.avanzar_tiempo(tiempo_real_viaje) # Avanza el reloj mientras el taxi "viaja"
+                time.sleep(tiempo_real_viaje)
                 
-                # 3. Viaje con Cliente
-                distancia_viaje, costo_viaje = self.sistema_atencion.calcular_tarifa_y_movimiento(self.ubicacion_actual, cliente.coordenadas_destino)
+                hora_fin_viaje = self.sistema_atencion.get_tiempo_simulado()
                 
-                self._simular_movimiento(distancia_viaje)
+                # 2. Finalizar Viaje
                 self.ubicacion_actual = cliente.coordenadas_destino
                 
-                # 4. Finalizar Viaje
-                self.ganancia_total += costo_viaje
+                if self.sistema_atencion.registrar_viaje_completo(self, cliente, costo_viaje, tiempo_viaje_simulado, hora_fin_viaje):
+                    self.ganancia_total += costo_viaje
+                    self.num_viajes += 1
+                    logging.info(f"[ {hora_fin_viaje.strftime('%H:%M:%S')} ] 🛬 {self.id_vehiculo} deja a {cliente.nombre}. Costo: {costo_viaje}€. Nueva Ubicación: {self.ubicacion_actual}")
+                    
                 cliente.marcar_como_atendido()
-                
-                logging.info(f"Taxi {self.id_vehiculo}: ha dejado al cliente {cliente.nombre} en {cliente.coordenadas_destino}. Costo del viaje: {costo_viaje} Euros.")
                 self.cliente_actual = None
-                time.sleep(0.5) # Simular tiempo para calificación/pago
+                time.sleep(0.5) # Pequeña pausa real para simular pago/descanso
 
             else:
-                # No hay clientes, espera un momento y vuelve a buscar
+                # No hay clientes. Espera 1 segundo real (3000 segundos simulados) y avanza el reloj.
+                self.sistema_atencion.avanzar_tiempo(1)
                 time.sleep(1)
         
-        logging.info(f"Taxi {self.id_vehiculo}: Fin de la jornada de trabajo.")
-
-
-    def _simular_movimiento(self, distancia):
-        """Simula el tiempo de viaje basado en la distancia (1 unidad de distancia = 1 segundo)."""
-        if distancia > 0:
-            tiempo_viaje = max(1, distancia / 2) # Velocidad: 2 unidades/seg, mínimo 1 seg.
-            time.sleep(tiempo_viaje) # Simulación de tiempo real de movimiento
-            # Simulación de la coordenada final (por simplicidad, actualizamos al final del viaje)
+        # Al finalizar el día, generar una calificación media aleatoria (1 a 5)
+        self.calificacion_media = round(random.uniform(3.0, 5.0), 2)
+        
+        logging.info(f"--- 🛑 {self.id_vehiculo}: Cierre de Jornada. Total viajes: {self.num_viajes}. Ganancia final: {self.ganancia_total}€.")

@@ -3,6 +3,7 @@ import threading
 import math
 import time
 import logging
+from datetime import datetime, timedelta
 
 # Configuración básica del logging para que los mensajes de los hilos se vean claros
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(message)s')
@@ -10,48 +11,64 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %
 class SistemaAtencion:
     """
     Simula el Sistema Central de Atención al Cliente UNIETAXI.
-    Se encarga de gestionar la lista de clientes en espera y realizar el match cliente-taxi.
+    Gestión de clientes, match y reloj del sistema.
     """
-    def __init__(self):
-        # Recurso Crítico: Lista de clientes esperando asignación de taxi.
+    def __init__(self, hora_inicio, hora_fin):
         self.clientes_en_espera = []
-        # Semáforo para proteger el acceso al recurso crítico (lista de espera).
         self.lock = threading.Lock()
-        logging.info("Sistema Central de Atención UNIETAXI inicializado.")
+        self.viajes_completados = [] # Para registrar los viajes
+        
+        # Gestión del tiempo simulado
+        self.hora_simulada = hora_inicio
+        self.hora_fin = hora_fin
+        self.factor_aceleracion = 3000 # 3000 segundos simulados por 1 segundo real (ej: 50 minutos/segundo)
+
+        logging.info(f"Sistema Central de Atención UNIETAXI iniciado. Hora simulada: {self.hora_simulada.strftime('%H:%M:%S')}")
+
+    def avanzar_tiempo(self, segundos_reales):
+        """Avanza el tiempo simulado."""
+        delta_simulado = timedelta(seconds=segundos_reales * self.factor_aceleracion)
+        self.hora_simulada += delta_simulado
+        
+        if self.hora_simulada > self.hora_fin:
+            self.hora_simulada = self.hora_fin
+            return False # Indica que el tiempo ha terminado
+        return True
+
+    def get_tiempo_simulado(self):
+        """Retorna la hora simulada actual."""
+        return self.hora_simulada
 
     def registrar_cliente(self, cliente):
         """Registra un nuevo cliente en la lista de espera."""
-        with self.lock: # Seccion crítica: Acceso a clientes_en_espera
+        with self.lock: # Sección crítica
             if cliente not in self.clientes_en_espera:
                 self.clientes_en_espera.append(cliente)
-                logging.info(f"Cliente {cliente.nombre} ha entrado en la lista de espera en {cliente.coordenadas_origen}.")
-        # 
+                logging.info(f"[ {self.hora_simulada.strftime('%H:%M:%S')} ] 🧍 Cliente {cliente.nombre}: Solicita servicio en {cliente.coordenadas_origen}.")
+
     def buscar_y_asignar_cliente(self, taxi):
-        """
-        Busca el cliente más cercano al taxi dentro de la lista de espera
-        y realiza la asignación (match) si hay clientes.
-        Retorna el cliente asignado o None.
-        """
+        """Busca el cliente más cercano y realiza la asignación."""
         cliente_asignado = None
         min_distancia = float('inf')
 
-        with self.lock: # Seccion crítica: Acceso y modificación de clientes_en_espera
+        with self.lock: # Sección crítica
             if not self.clientes_en_espera:
                 return None
 
-            # 1. Buscar el cliente más cercano (criterio de match)
-            # El documento indica: "busca en un radio de 2 km" y selecciona el "más cercano"[cite: 40].
-            # Aquí, por simplicidad, tomamos el más cercano de la lista.
+            # Buscar el cliente más cercano
             for cliente in self.clientes_en_espera:
                 distancia = self._calcular_distancia(taxi.ubicacion_actual, cliente.coordenadas_origen)
                 if distancia < min_distancia:
                     min_distancia = distancia
                     cliente_asignado = cliente
             
-            # 2. Asignar y remover de la lista de espera
+            # Asignar y remover
             if cliente_asignado:
                 self.clientes_en_espera.remove(cliente_asignado)
-                logging.info(f"*** ASIGNACIÓN: Taxi {taxi.id_vehiculo} asignado a cliente {cliente_asignado.nombre}. Distancia a recoger: {min_distancia:.2f} unidades.")
+                # Registro de la hora de inicio de la recogida
+                cliente_asignado.hora_recogida_simulada = self.get_tiempo_simulado() 
+                
+                logging.info(f"[ {self.hora_simulada.strftime('%H:%M:%S')} ] *** ASIGNACIÓN: {taxi.id_vehiculo} -> {cliente_asignado.nombre}. Distancia a recoger: {min_distancia:.2f} unidades.")
         
         return cliente_asignado
 
@@ -59,18 +76,30 @@ class SistemaAtencion:
         """Calcula la distancia euclidiana entre dos puntos (coordenadas x, y)."""
         return math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
 
-    def calcular_tarifa_y_movimiento(self, pos_origen, pos_destino):
-        """
-        Calcula la distancia y el costo (1 unidad = 1 Euro)
-        Retorna (distancia, costo_total)
-        """
+    def calcular_costo_y_tiempo(self, pos_origen, pos_destino):
+        """Calcula la distancia, costo (Euro) y tiempo de viaje (segundos simulados)."""
         distancia = self._calcular_distancia(pos_origen, pos_destino)
-        # 1 unidad de coordenada = 1 Euro de tarifa.
-        costo_total = round(distancia) # Redondeamos la distancia para la tarifa
+        costo_total = round(distancia) # 1 unidad de coordenada = 1 Euro
+        
+        # Asumiendo una velocidad constante, 2 unidades de distancia = 1 segundo simulado
+        tiempo_viaje_simulado = max(1, distancia / 2) 
 
-        return distancia, costo_total
+        return distancia, costo_total, tiempo_viaje_simulado
 
-    def get_estado_espera(self):
-        """Retorna el número de clientes esperando."""
+    def registrar_viaje_completo(self, taxi, cliente, costo, duracion_simulada, hora_fin_simulada):
+        """Registra un viaje completado si la hora de fin es antes de medianoche."""
+        
+        # Condición: no registrar si el viaje terminó después de la medianoche
+        if hora_fin_simulada > self.hora_fin:
+             logging.warning(f"[ {hora_fin_simulada.strftime('%H:%M:%S')} ] ❌ VIAJE NO REGISTRADO: El viaje de {taxi.id_vehiculo} con {cliente.nombre} finalizó después de medianoche. Contará para el día siguiente.")
+             return False
+
         with self.lock:
-            return len(self.clientes_en_espera)
+            self.viajes_completados.append({
+                'taxi_id': taxi.id_vehiculo,
+                'cliente_nombre': cliente.nombre,
+                'costo': costo,
+                'hora_recogida': cliente.hora_recogida_simulada.strftime('%H:%M:%S'),
+                'hora_llegada': hora_fin_simulada.strftime('%H:%M:%S'),
+            })
+        return True
