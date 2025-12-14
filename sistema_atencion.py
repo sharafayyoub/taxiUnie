@@ -4,6 +4,7 @@ import math
 import time
 import logging
 from datetime import datetime, timedelta
+import random
 
 # Configuración básica del logging para que los mensajes de los hilos se vean claros
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(message)s')
@@ -16,7 +17,7 @@ class SistemaAtencion:
     def __init__(self, hora_inicio, hora_fin):
         self.clientes_en_espera = []
         self.lock = threading.Lock()
-        self.viajes_completados = [] # Para registrar los viajes
+        self.viajes_completados = []# Para registrar los viajes
         
         # Gestión del tiempo simulado
         self.hora_simulada = hora_inicio
@@ -79,10 +80,20 @@ class SistemaAtencion:
     def calcular_costo_y_tiempo(self, pos_origen, pos_destino):
         """Calcula la distancia, costo (Euro) y tiempo de viaje (segundos simulados)."""
         distancia = self._calcular_distancia(pos_origen, pos_destino)
-        costo_total = round(distancia) # 1 unidad de coordenada = 1 Euro
-        
-        # Asumiendo una velocidad constante, 2 unidades de distancia = 1 segundo simulado
-        tiempo_viaje_simulado = max(1, distancia / 2) 
+        costo_total = round(distancia)
+        base = max(1, distancia / 2)
+        # Tráfico según hora simulada (10:00-00:00)
+        h = self.hora_simulada.hour
+        if 10 <= h < 12:
+            media = 1.0
+        elif 12 <= h < 16:
+            media = 1.5
+        elif 16 <= h < 20:
+            media = 1.4
+        else:
+            media = 1.1
+        trafico = max(0.7, min(1.8, random.gauss(media, 0.15)))
+        tiempo_viaje_simulado = base * trafico
 
         return distancia, costo_total, tiempo_viaje_simulado
 

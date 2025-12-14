@@ -69,8 +69,10 @@ class Taxi(threading.Thread):
 
             else:
                 # No hay clientes. Espera 1 segundo real (3000 segundos simulados) y avanza el reloj.
-                self.sistema_atencion.avanzar_tiempo(1)
-                time.sleep(1)
+                espera_sim= random.randint(60, 8*60)
+                espera_real = espera_sim / self.sistema_atencion.factor_aceleracion
+                self.sistema_atencion.avanzar_tiempo(espera_real)
+                time.sleep(espera_real)
         
         # Al finalizar el día, generar una calificación media aleatoria (1 a 5)
         self.calificacion_media = round(random.uniform(3.0, 5.0), 2)
