@@ -1,1 +1,2 @@
 # taxiUnie
+Ejecuta el codigo en archivo  main.py. Si en un supuesto caso no se ejecuta, borra la carpeta pycache que se crea al ejecutar el main y ejecuta cada archivp por separado antes de ejecutar el main.py.
